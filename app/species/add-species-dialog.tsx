@@ -170,10 +170,11 @@ export default function AddSpeciesDialog({ userId }: { userId: string }) {
 
     // Not sure why the types here do not work
     const descrip = await response.json();
-    const pages = descrip.query.pages;
-    const firstPageKey = Object.keys(pages)[0];
-    const extract = pages[firstPageKey].extract;
-    setDescription(JSON.stringify(extract));
+    // const pages = descrip.query.pages;
+    // const firstPageKey = Object.keys(pages)[0];
+    // const extract = pages[firstPageKey].extract;
+    // setDescription(JSON.stringify(extract));
+    setDescription(JSON.stringify(descrip));
 
     return toast({
       title: "Species found on Wikipedia!",
