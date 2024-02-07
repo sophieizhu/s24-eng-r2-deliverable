@@ -56,6 +56,14 @@ const speciesSchema = z.object({
     .transform((val) => (!val || val.trim() === "" ? null : val.trim())),
 });
 
+const searchSchema = z.object({
+  scientific_name: z
+    .string()
+    .trim()
+    .min(1)
+    .transform((val) => val?.trim()),
+});
+
 type FormData = z.infer<typeof speciesSchema>;
 
 // Default values for the form fields.
@@ -80,6 +88,9 @@ export default function AddSpeciesDialog({ userId }: { userId: string }) {
   // Control open/closed state of the dialog
   const [open, setOpen] = useState<boolean>(false);
 
+  // Variables to track the description (AND NAME) that the user's input in the API search bar is
+  const [description, setDescription] = useState("");
+
   // Instantiate form functionality with React Hook Form, passing in the Zod schema (for validation) and default values
   const form = useForm<FormData>({
     resolver: zodResolver(speciesSchema),
@@ -88,6 +99,7 @@ export default function AddSpeciesDialog({ userId }: { userId: string }) {
   });
 
   const onSubmit = async (input: FormData) => {
+    console.log("hi");
     // The `input` prop contains data that has already been processed by zod. We can now use it in a supabase query
     const supabase = createBrowserSupabaseClient();
     const { error } = await supabase.from("species").insert([
@@ -129,6 +141,47 @@ export default function AddSpeciesDialog({ userId }: { userId: string }) {
     });
   };
 
+  // Start of API implementation
+  const defaultSearchValues = {
+    scientific_name: "",
+  };
+
+  type SearchFormValues = z.infer<typeof searchSchema>;
+
+  const searchForm = useForm<SearchFormValues>({
+    resolver: zodResolver(searchSchema),
+    defaultValues: defaultSearchValues,
+    mode: "onChange",
+  });
+
+  // This function isn't being run for some reason when "Submit" is clicked
+  const onSearch = async (input: SearchFormValues) => {
+    // Cannot use useEffect within a function
+    const response = await fetch(
+      "https://en.wikipedia.org/w/api.php?format=json&action=query&prop=extracts&exintro&explaintext&redirects=1&titles=" +
+        input.scientific_name,
+    );
+    if (!response.ok) {
+      return toast({
+        title: "No Wikipedia entry found.",
+        description: "Cannot fetch an entry for " + input.scientific_name + ".",
+      });
+    }
+
+    // Not sure why the types here do not work
+    const descrip = await response.json();
+    const pages = descrip.query.pages;
+    const firstPageKey = Object.keys(pages)[0];
+    const extract = pages[firstPageKey].extract;
+    setDescription(JSON.stringify(extract));
+
+    return toast({
+      title: "Species found on Wikipedia!",
+      description: "Successfully added " + input.scientific_name + ".",
+    });
+  };
+  // End of API stuff
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -144,6 +197,32 @@ export default function AddSpeciesDialog({ userId }: { userId: string }) {
             Add a new species here. Click &quot;Add Species&quot; below when you&apos;re done.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Below is the API search bar */}
+        <Form {...form}>
+          <form onSubmit={(e: BaseSyntheticEvent) => void searchForm.handleSubmit(onSearch)(e)} className="space-y-8">
+            <div className="grid w-full items-center gap-4">
+              <FormField
+                control={form.control}
+                name="scientific_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Enter stuff</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Cavia porcellus" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <Button type="submit" className="mr-2">
+              Search
+            </Button>
+          </form>
+        </Form>
+
+        {/* Below is the form for submitting a new species */}
         <Form {...form}>
           <form onSubmit={(e: BaseSyntheticEvent) => void form.handleSubmit(onSubmit)(e)}>
             <div className="grid w-full items-center gap-4">
@@ -253,12 +332,14 @@ export default function AddSpeciesDialog({ userId }: { userId: string }) {
                 render={({ field }) => {
                   // We must extract value from field and convert a potential defaultValue of `null` to "" because textareas can't handle null values: https://github.com/orgs/react-hook-form/discussions/4091
                   const { value, ...rest } = field;
+                  setDescription(value ?? "");
                   return (
                     <FormItem>
                       <FormLabel>Description</FormLabel>
                       <FormControl>
                         <Textarea
-                          value={value ?? ""}
+                          // value={value ?? ""}
+                          value={description ?? ""}
                           placeholder="The guinea pig or domestic guinea pig, also known as the cavy or domestic cavy, is a species of rodent belonging to the genus Cavia in the family Caviidae."
                           {...rest}
                         />
